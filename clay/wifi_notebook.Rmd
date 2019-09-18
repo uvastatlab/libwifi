@@ -1,0 +1,111 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Exploring library wifi data.
+
+Read it in. This data not to be store on GitHub or otherwise made publically available.
+
+```{r message=FALSE}
+library(tidyverse)
+wifi <- readRDS("/Users/jcf2d/Box Sync/WiFi_data/wifi.rds")
+wifi$location <- factor(wifi$location)
+```
+
+Investigating records that have all `Department`, `Display_Department`, `MBU`, `Registrar_School`, and `uvaPersonIAMAffiliation` all missing. Why is that? Should we drop them? Are they occurring at certain locations?
+
+
+Add indicator that identifies records with all vars of interest missing
+```{r}
+vars <- names(wifi)[-(1:7)]
+wifi <- mutate(wifi, allNA = apply(wifi[vars], 1, function(x)all(is.na(x))))
+```
+
+Quick count
+
+```{r}
+scales::percent(mean(wifi$allNA))
+scales::comma(sum(wifi$allNA))
+```
+
+Now by location
+
+```{r}
+wifi %>% 
+  group_by(location) %>% 
+  summarise(sum_na = sum(allNA),
+            mean_na = mean(allNA))
+```
+
+Create two data frames: one with records where all vars of interest missing, and one with no such records
+
+```{r}
+wifi_allNA <- wifi %>% filter(allNA)
+wifi_noNA <- wifi %>% filter(!allNA)
+# confirm they add up
+nrow(wifi_noNA) + nrow(wifi_allNA) == nrow(wifi)
+```
+
+Are there mac addresses in both data frames?
+
+```{r}
+length(intersect(wifi_noNA$mac, wifi_allNA$mac))
+which_mac <- intersect(wifi_noNA$mac, wifi_allNA$mac)
+```
+
+Yes there is. Let's explore. Is there some pattern to them?
+
+```{r}
+wifi2 <- filter(wifi, mac %in% which_mac)
+map(wifi2[vars], ~ table(.x))
+```
+
+Apparently not? Maybe some pattern by location?
+
+```{r}
+wifi2 %>% 
+  group_by(location) %>% 
+  summarise(sum_na = sum(allNA),
+            mean_na = mean(allNA))
+```
+
+Seems to happen mostly in Harrison and Clemons. 
+
+It appears that records having `Department`, `Display_Department`, `MBU`, `Registrar_School` and `uvaPersonIAMAffiliation` all missing are not always that way. For example, see mac 3673 (user 12800). Has only one instance of allNA at Clemons, but has all NA at Alderman.
+
+```{r}
+wifi2 %>% 
+  filter(mac == 3673) %>% 
+  group_by(location) %>% 
+  summarise(sum_na = sum(allNA),
+            mean_na = mean(allNA))
+```
+
+Does this pattern happen all the time?
+
+```{r}
+wifi2 %>% 
+  group_by(mac, location) %>% 
+  summarise(mean_na = round(mean(allNA), 2)) %>% 
+  as.data.frame()
+```
+
+Apparently not. See mac 19698. Has all missing at Clemons and none at Alderman.
+
+```{r}
+# mac in wifi_noNA not in wifi_allNA
+length(setdiff(wifi_noNA$mac, wifi_allNA$mac))
+
+# mac in wifi_allNA not in wifi
+length(setdiff(wifi_allNA$mac, wifi_noNA$mac))
+```
+
+Appears to be over 16,500 unique macs that always have all `vars` missing
+
+```{r}
+n_distinct(wifi$mac)
+length(setdiff(wifi_allNA$mac, wifi_noNA$mac))/ n_distinct(wifi$mac)
+```
+
+That's about 26% of the unique macs.
