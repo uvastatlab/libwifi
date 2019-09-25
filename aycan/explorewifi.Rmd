@@ -43,7 +43,7 @@ posstaff <- aldermanstaff %>%
   rename(staylength=n) %>% 
   arrange(desc(staylength))
 
-write.csv(posstaff, "/Users/aycankatitas/Desktop/libwifi/aycan/aldermanstaff.csv",quote=FALSE,row.names=FALSE)
+write.csv(posstaff, "aldermanstaff.csv",quote=FALSE,row.names=FALSE)
 
 # Clemons 
 
@@ -64,7 +64,7 @@ posstaffc <- clemonsstaff %>%
   rename(staylength=n) %>% 
   arrange(desc(staylength))
 
-write.csv(posstaffc, "/Users/aycankatitas/Desktop/libwifi/aycan/clemonsstaff.csv",quote=FALSE,row.names=FALSE)
+write.csv(posstaffc, "clemonsstaff.csv",quote=FALSE,row.names=FALSE)
 
 # Harrison
 
@@ -85,7 +85,7 @@ posstaffh <- harrisonstaff %>%
   rename(staylength=n) %>% 
   arrange(desc(staylength))
 
-write.csv(posstaffh, "/Users/aycankatitas/Desktop/libwifi/aycan/harrisonstaff.csv",quote=FALSE,row.names=FALSE)
+write.csv(posstaffh, "harrisonstaff.csv",quote=FALSE,row.names=FALSE)
 
 
 
