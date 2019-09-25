@@ -1,0 +1,96 @@
+---
+title: "explorewifi"
+output: html_document
+author: Aycan Katitas 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, library, echo=FALSE}
+setwd("~/Box/WiFi_data")
+
+library(dplyr)
+library(ggplot2)
+library(chron)
+```
+
+```{r}
+
+wifi <- readRDS("wifi.rds")
+
+# There are no empty user ids anymore 
+
+# Figure out which ones are library staff 
+
+# Alderman 
+
+alderman <- wifi %>% 
+  filter(location=="alderman") 
+
+aldermanstaff <- alderman %>% 
+  filter(day=="Sat"|day=="Sun") %>% 
+  separate(time,c("date","time"), sep=" ")
+
+aldermanstaff$time <- chron(times= aldermanstaff$time) 
+
+aldermanstaff <- aldermanstaff %>% 
+  filter((day=="Sat" & time>"20:30:00") | (day=="Sun" & time<"09:30:00"))
+
+posstaff <- aldermanstaff %>% 
+  count(user,mac) %>% 
+  rename(staylength=n) %>% 
+  arrange(desc(staylength))
+
+write.csv(posstaff, "/Users/aycankatitas/Desktop/libwifi/aycan/aldermanstaff.csv",quote=FALSE,row.names=FALSE)
+
+# Clemons 
+
+clemons <- wifi %>% 
+  filter(location=="clemons") 
+
+clemonsstaff <- clemons %>% 
+  filter(day=="Sat"|day=="Sun") %>% 
+  separate(time,c("date","time"), sep=" ")
+
+clemonsstaff$time <- chron(times= clemonsstaff$time) 
+
+clemonsstaff <- clemonsstaff %>% 
+  filter((day=="Sun" & time>"00:30:00") | (day=="Sun" & time<"09:30:00"))
+
+posstaffc <- clemonsstaff %>% 
+  count(user,mac) %>% 
+  rename(staylength=n) %>% 
+  arrange(desc(staylength))
+
+write.csv(posstaffc, "/Users/aycankatitas/Desktop/libwifi/aycan/clemonsstaff.csv",quote=FALSE,row.names=FALSE)
+
+# Harrison
+
+harrison <- wifi %>% 
+  filter(location=="harrison") 
+
+harrisonstaff <- harrison %>% 
+  filter(day=="Sat"|day=="Sun") %>% 
+  separate(time,c("date","time"), sep=" ")
+
+harrisonstaff$time <- chron(times= harrisonstaff$time) 
+
+harrisonstaff <- harrisonstaff %>% 
+  filter((day=="Sun" & time>"00:30:00") | (day=="Sun" & time<"09:30:00"))
+
+posstaffh <- harrisonstaff %>% 
+  count(user,mac) %>% 
+  rename(staylength=n) %>% 
+  arrange(desc(staylength))
+
+write.csv(posstaffh, "/Users/aycankatitas/Desktop/libwifi/aycan/harrisonstaff.csv",quote=FALSE,row.names=FALSE)
+
+
+
+
+
+
+```
+
