@@ -14,20 +14,203 @@ setwd("~/Box/WiFi_data")
 library(dplyr)
 library(ggplot2)
 library(chron)
+library(knitr)
+library(lubridate)
+library(scales)
+require(gridExtra)
+
+opts_knit$set(root.dir = '/Users/aycankatitas/Box/WiFi_data')
 ```
 
+There could also be cleaning stuff connecting right before or right after the library closes? 
 ```{r}
 
-wifi <- readRDS("wifi.rds")
-
-# There are no empty user ids anymore 
+wifi <- readRDS("/Users/aycankatitas/Box/WiFi_data/wifi.rds")
 
 # Figure out which ones are library staff 
+
+# Look at which users stay online during Christmas - Dec 23 - Dec 31
 
 # Alderman 
 
 alderman <- wifi %>% 
   filter(location=="alderman") 
+
+aldermanstaff <- alderman %>% 
+  separate(time,c("date","time"), sep=" ")
+
+aldermanstaff$date <- gsub("-","",aldermanstaff$date)
+
+aldermanstaff$date <- as.Date(aldermanstaff$date, "%Y%m%d")
+
+
+aldermanxmas <- aldermanstaff %>% 
+  filter(date>"2018-12-22")
+
+userxmas <- aldermanxmas %>% 
+  dplyr::select(user,MBU)
+
+userxmas <- unique(userxmas)
+
+userxmas <- within(userxmas, 
+                   MBU <- factor(MBU, 
+                                      levels=names(sort(table(MBU), 
+                                                        decreasing=TRUE))))
+
+userxmasg <- userxmas %>% 
+  filter(!is.na(MBU))
+
+# Create a bar chart of users who were online during Xmas 
+
+barp <- ggplot(userxmasg, aes(MBU)) +
+  geom_bar(fill = "#0073C2FF") +
+  theme(text = element_text(size=10),
+           axis.line = element_line(colour = "black"),
+           panel.grid.major = element_blank(),
+           panel.grid.minor = element_blank(),
+           panel.border = element_blank(),
+           panel.background = element_blank(),
+        axis.text.x=element_text(angle=45, hjust=1, vjust=1)) +
+  ylab("Count") + 
+  ggtitle("Distribution of MBU for Users Online During Christmas Break")
+
+ggsave("/Users/aycankatitas/Box/WiFi_data/Visualizations (Tab)/xmasalderman.jpeg")
+
+# see which user was connected the most 
+
+userxmass <- aldermanxmas %>% 
+  count(user,date,MBU) %>% 
+  rename(hours=n) %>% 
+  arrange(date,desc(hours))
+
+write.csv(userxmass,"/Users/aycankatitas/Box/WiFi_data/fixed devices/aldermanxmaslist.csv",quote=FALSE,row.names=TRUE)
+
+# Possible fixed users for Alderman 
+# userids: 31166, 3216, 18489, 21153, 23318, 25962, 31780, 27822
+
+# 31166 
+
+us31166 <- aldermanstaff %>% 
+  filter(user==31166) %>% 
+  count(date) %>% 
+  rename(hours=n)
+
+## Get yearly-daily data on users who were always online during xmas 
+# Create 4 panel graph with February 
+
+us31166f <- aldermanstaff %>%
+  filter(user==31166) %>% 
+  filter(date>"2018-01-31"&date<"2018-03-01") %>% 
+  count(date) %>% 
+  rename(hours=n)
+
+us3216f <- aldermanstaff %>%
+  filter(user==3216) %>% 
+  filter(date>"2018-01-31"&date<"2018-03-01") %>% 
+  count(date) %>% 
+  rename(hours=n)
+
+us18489f <- aldermanstaff %>%
+  filter(user==18489) %>% 
+  filter(date>"2018-01-31"&date<"2018-03-01") %>% 
+  count(date) %>% 
+  rename(hours=n)
+
+us21153f <- aldermanstaff %>%
+  filter(user==21153) %>% 
+  filter(date>"2018-01-31"&date<"2018-03-01") %>% 
+  count(date) %>% 
+  rename(hours=n)
+
+
+
+time31166f <- ggplot(us31166f, aes(x=date,y=hours)) +
+  geom_line() +
+  theme(text = element_text(size=10),
+           axis.line = element_line(colour = "black"),
+           panel.grid.major = element_blank(),
+           panel.grid.minor = element_blank(),
+           panel.border = element_blank(),
+           panel.background = element_blank(),
+        axis.text.x=element_text(angle=45, hjust=1, vjust=1)) +
+  scale_x_date(date_breaks = "days" , date_labels = "%d-%m")+ 
+  ylab("Hours") + 
+  ggtitle("Daily Connection of User 31166 - February")
+
+time3216f <- ggplot(us3216f, aes(x=date,y=hours)) +
+  geom_line() +
+  theme(text = element_text(size=10),
+           axis.line = element_line(colour = "black"),
+           panel.grid.major = element_blank(),
+           panel.grid.minor = element_blank(),
+           panel.border = element_blank(),
+           panel.background = element_blank(),
+        axis.text.x=element_text(angle=45, hjust=1, vjust=1)) +
+  scale_x_date(date_breaks = "days" , date_labels = "%d-%m")+ 
+  ylab("Hours") + 
+  ggtitle("Daily Connection of User 3216 - February")
+
+time18489f <- ggplot(us18489f, aes(x=date,y=hours)) +
+  geom_line() +
+  theme(text = element_text(size=10),
+           axis.line = element_line(colour = "black"),
+           panel.grid.major = element_blank(),
+           panel.grid.minor = element_blank(),
+           panel.border = element_blank(),
+           panel.background = element_blank(),
+        axis.text.x=element_text(angle=45, hjust=1, vjust=1)) +
+  scale_x_date(date_breaks = "days" , date_labels = "%d-%m")+ 
+  ylab("Hours") + 
+  ggtitle("Daily Connection of User 18489 - February")
+
+time21153f <- ggplot(us21153f, aes(x=date,y=hours)) +
+  geom_line() +
+  theme(text = element_text(size=10),
+           axis.line = element_line(colour = "black"),
+           panel.grid.major = element_blank(),
+           panel.grid.minor = element_blank(),
+           panel.border = element_blank(),
+           panel.background = element_blank(),
+        axis.text.x=element_text(angle=45, hjust=1, vjust=1)) +
+  scale_x_date(date_breaks = "days" , date_labels = "%d-%m")+ 
+  ylab("Hours") + 
+  ggtitle("Daily Connection of User 21153 - February")
+
+grid.arrange(time31166f, time3216f, time18489f, time21153f, ncol=2)
+
+pdf("/Users/aycankatitas/Box/WiFi_data/fixed devices/userdailyfeb.pdf")
+grid.arrange(time31166f, time3216f, time18489f, time21153f)
+
+# Alderman Thnxgiving break - Nov 21 - 24 
+
+
+aldermanthnx <- aldermanstaff %>% 
+  filter(date>"2018-11-21" & date<"2018-11-24")
+
+userthnx <- aldermanthnx %>% 
+  dplyr::select(user,MBU)
+
+userthnx <- unique(userthnx)
+
+
+userxmas$xmas <- "xmas"
+userthnx$thnx <- "thnx"
+
+aldholiday <- full_join(userxmas,userthnx)
+
+write.csv(aldholiday,"/Users/aycankatitas/Box/WiFi_data/fixed devices/fixeddevicesunionholiday.csv")
+
+aldholboth <- aldholiday %>% 
+  filter(!is.na(xmas)&!is.na(thnx))
+
+write.csv(aldholboth,"/Users/aycankatitas/Box/WiFi_data/fixed devices/fixeddevicesbothholiday.csv")
+
+
+
+
+
+
+# Alderman weekends 
 
 aldermanstaff <- alderman %>% 
   filter(day=="Sat"|day=="Sun") %>% 
@@ -36,7 +219,7 @@ aldermanstaff <- alderman %>%
 aldermanstaff$time <- chron(times= aldermanstaff$time) 
 
 aldermanstaff <- aldermanstaff %>% 
-  filter((day=="Sat" & time>"20:30:00") | (day=="Sun" & time<"09:30:00"))
+  filter((day=="Sat" & time>"17:00:00") | (day=="Sun" & time<"09:30:00"))
 
 posstaff <- aldermanstaff %>% 
   count(user,mac) %>% 
@@ -44,6 +227,10 @@ posstaff <- aldermanstaff %>%
   arrange(desc(staylength))
 
 write.csv(posstaff, "aldermanstaff.csv",quote=FALSE,row.names=FALSE)
+
+
+
+
 
 # Clemons 
 
@@ -89,8 +276,9 @@ write.csv(posstaffh, "harrisonstaff.csv",quote=FALSE,row.names=FALSE)
 
 
 
+```
 
-
+```{r}
 
 ```
 
