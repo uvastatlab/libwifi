@@ -18,6 +18,7 @@ library(knitr)
 library(lubridate)
 library(scales)
 require(gridExtra)
+library(tidyverse)
 
 opts_knit$set(root.dir = '/Users/aycankatitas/Box/WiFi_data')
 ```
@@ -36,6 +37,18 @@ wifi <- readRDS("/Users/aycankatitas/Box/WiFi_data/wifi.rds")
 alderman <- wifi %>% 
   filter(location=="alderman") 
 
+```
+
+```{r, listing users by spells, echo=FALSE}
+
+
+
+```
+
+
+
+
+```{r, fixed users, echo=FALSE}
 aldermanstaff <- alderman %>% 
   separate(time,c("date","time"), sep=" ")
 
@@ -43,6 +56,10 @@ aldermanstaff$date <- gsub("-","",aldermanstaff$date)
 
 aldermanstaff$date <- as.Date(aldermanstaff$date, "%Y%m%d")
 
+dummydata <- head(alderman, 100)
+
+save(dummydata, file="/Users/aycankatitas/Box/WiFi_data/dummy.Rdata")
+write.csv(dummydata, "/Users/aycankatitas/Box/WiFi_data/dummy.csv",row.names=F,quote=F)
 
 aldermanxmas <- aldermanstaff %>% 
   filter(date>"2018-12-22")
