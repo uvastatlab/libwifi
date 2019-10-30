@@ -1,6 +1,8 @@
 library(tidyverse)
 library(lubridate)
+library(anytime)
 
+#join information about library hours and fixed devices
 wifi <- read_rds('wifi.rds')
 openhours <- read_rds('clem_ald_hours.rds')
 fixed <- read.csv('fixeddevicesunionholiday.csv')
@@ -39,6 +41,7 @@ wifi_closed %>%
   ylab("Unique Users") +
   ggtitle("Unique users per day during library closures")
 
+#Average unique users by hour during library closures per hour
 wifi_closed %>% 
   filter(fix == 0, open == 0) %>%
   group_by(location, time) %>%
@@ -58,6 +61,7 @@ wifi_closed %>%
   ylab("Average Unique Users") +
   ggtitle("Average unique users by hour during library closures")
 
+#Unique users across an average week during library closures
 wifi_closed %>% 
   filter(fix == 0, open == 0) %>%
   group_by(location, time) %>%
@@ -79,6 +83,7 @@ wifi_closed %>%
   ylab("Average unique users") +
   ggtitle("Unique users across an average week during library closures")
 
+#Sample numbers for Alderman closures
 openhours %>%
   filter(alderman == 0) %>%
   mutate(hour = hour(time), minute = minute(time), day = wday(time, week_start = 1)) %>%
@@ -93,6 +98,7 @@ openhours %>%
   ylab("Number of closures") +
   ggtitle("Number of Alderman closures by weekday across the year")
   
+#Sample numbers for Clemons closures
 openhours %>%
   filter(clemons == 0) %>%
   mutate(hour = hour(time), minute = minute(time), day = wday(time, week_start = 1)) %>%
@@ -107,5 +113,45 @@ openhours %>%
   xlab("Weekdays") +
   ylab("Number of closures") +
   ggtitle("Number of Clemons closures by weekday across the year")
+
+#Presumed walkby data through the week during the semester and during break
+walkby <- wifi_closed %>% 
+  filter(fix == 0, open == 0, location == "alderman") %>%
+  group_by(location, time) %>%
+  summarize(uniq = length(unique(user))) %>%
+  mutate(hour = hour(time), 
+         minute = minute(time), 
+         day = wday(time, week_start = 1),
+         week = day + (hour/24) + (minute/24/60),
+         month = month(time),
+         semester = if_else(time > anydate("2018-08-28") & time < anydate("2018-12-18"), 1, 0),
+         semester = if_else(time > anydate("2018-01-17") & time < anydate("2018-05-11"), 1, semester))
+
+walkby %>%
+  filter(semester == 0) %>%
+  ggplot() +
+  geom_point(aes(x = week, y = uniq, color = semester, group = )) +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7), 
+                     labels = c("Mon","Tues","Wed","Thurs","Fri","Sat","Sun")) + 
+  xlab("Weekdays") + 
+  ylab("Average unique users") +
+  ggtitle("Unique users across an average week during library closures")
+
+#Estimate of walkbys by hour during a weekday
+weekday_walkby <- walkby %>%
+  filter(semester == 0, week < 5) %>%
+  group_by(hour) %>%
+  summarize(avguniq = mean(uniq))
+
+weekday_walkby %>%
+  ggplot() +
+  geom_line(aes(x = hour, y = avguniq)) +
+  scale_x_continuous(breaks=c(0,6,12,18,24),labels=c("00:00","06:00","12:00","18:00","24:00")) +
+  xlab("Time (hours)") +
+  ylab("Average walkbys") +
+  ggtitle("Walkbys per hour during weekday")
+  
+
+
 
 
