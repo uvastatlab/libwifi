@@ -1,0 +1,1389 @@
+---
+title: "Unique WiFi User Connections 2018"
+author: "StatLab: Laura White, Clay Ford, Michele Claibourn"
+date: "Fall 2019"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+```
+
+```{r libraries, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(plyr)
+library(plotly)
+library(ggplot2)
+library(lubridate)
+library(knitr)
+library(readxl)
+```
+
+```{r data, cache=TRUE}
+# read data
+wifi <- readRDS("../WiFi_data/wifi.rds")
+gatecount <- read_excel("../WiFi_data/2018gate-counts.xlsx", sheet = 1)
+```
+
+```{r split}
+# format date/time
+wifi$date <- lubridate::date(wifi$time)
+wifi$timestamp <- hms::as.hms(wifi$time)
+```
+
+
+## Total Unique WiFi Users | By Semester, Month, and Week
+
+The following figures show the number of unique users connected to the Library's WiFi in Alderman, Clemons, and Harrison-Small by semester, by month, and by week. 
+
+* Key question: As a proxy for library visitors, how does the number of unique user connections vary across time? These measures emphasize the number of distinct visitors rather than the number of distinct visits.
+
+Note: The original files did not contain data for Clemons in January or February. Clemons was closed from May 14 to August 10. The presence of connections in Clemons during this period may be a combination of device connections among staff working in the building and from individuals nearby the building.
+
+
+## Unique WiFi Users by Semester
+
+```{r}
+# generate semesters/academic periods
+wifi <- mutate(wifi, semester = case_when(
+  date >= "2018-01-01" & date <= "2018-05-20" ~ "Spring",
+  date >= "2018-05-21" & date <= "2018-08-27" ~ "Summer",
+  date >= "2018-08-28" & date <= "2018-12-31" ~ "Fall"))
+```
+
+```{r eval=FALSE}
+# Function to count the number of unique values
+total_unique <- function(var) {
+  x <- length(unique(var))
+  return(x)
+}
+```
+
+```{r semesterlocation, cache=TRUE}
+# Aggregating total unique visitors by semester and location 
+combined <- wifi %>% 
+  group_by(semester, location) %>% 
+  summarise(user = n_distinct(user))
+
+combined$semester <- factor(combined$semester, 
+                                        levels = c("Spring", "Summer", "Fall"))
+```
+
+```{r}
+# Combined plot 
+semester_combined_plot  <- plot_ly(combined, x = ~semester, y = ~user, 
+                                   color= ~location, type="bar")   %>%
+  layout(title = 'Total unique users ids by semester',
+         yaxis = list(title="Unique user ids"),
+         xaxis = list(title="Semester"))
+
+semester_combined_plot
+```
+
+* The number of unique user connections is fairly constant across semesters, falling predictably in the summer. The lower number in Clemons in the spring is likely an artifact of the missing files for January and February. 
+
+
+## Unique WiFi Users by Month
+
+```{r combinedmonth}
+# Aggregating by month and location
+combined_monthly <- wifi %>% 
+  group_by(month, location) %>% 
+  summarise(user = n_distinct(user)) %>% 
+  as.data.frame()
+```
+
+```{r mcp}
+# Monthly combined plot
+monthly_combined_plot <- plot_ly(combined_monthly, x = ~month, y = ~user, 
+                                   color= ~location, 
+        type = "scatter", mode = "lines") %>%
+  layout(title = 'Total unique users by month',
+         yaxis = list(title="Unique users", range=c(0,18000)),
+         xaxis = list(title="Month"))
+
+monthly_combined_plot
+```
+
+* The number of users connecting to library wifi peaks in April in the spring semester and in September in the fall semester, following a similar pattern across each building.
+
+
+## Unique WiFi Users by Week
+
+```{r week, cache=TRUE, warning=FALSE, message=FALSE}
+# Aggregating by week for all libraries 
+unique_weekly <- wifi %>% 
+  group_by(week = week(date)) %>% 
+  summarise(unique_users = n_distinct(user))
+```
+
+```{r}
+# Add dates to week number, weeks start with Monday
+wm <- mdy("1/1/2018") + 7*0:52 
+week_mon <- stamp("Jan 1", quiet = TRUE)(wm)
+
+unique_weekly$week_mon <- week_mon
+unique_weekly$week_mon  <- factor(unique_weekly$week_mon, 
+                                   levels = week_mon, ordered = TRUE)
+```
+
+```{r weekag, warning=FALSE, message=FALSE}
+# Aggregating by week 
+unique_weekly2 <- wifi %>%
+  group_by(week = week(date), location) %>% 
+  summarise(unique_users = n_distinct(user))
+
+```
+
+```{r}
+# Add in week labels
+labels <- select(unique_weekly, week, week_mon)
+unique_weekly2 <- left_join(unique_weekly2, labels, by = "week")
+```
+
+```{r}
+# LW: Weekly combined plot - I have shading on the daily graphs, but I can't do
+# that here and have the dates for many of these periods line up exactly because
+# the data is organized by Mondays.
+
+combined_weekly_plot <- unique_weekly2 %>% 
+   ungroup() %>%
+   plot_ly(x = ~week_mon, y = ~unique_users, color= ~location, 
+        type = "scatter", mode = "lines") %>%
+  layout(title = 'Total unique users by week',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Week"))
+
+combined_weekly_plot <- layout(combined_weekly_plot, 
+                                 annotations = list(list(x = "Mar 05", 
+                                                         y = 11000,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Spring break',
+                                      showarrow = TRUE),
+                                 list(x = "Nov 19", y = 5000,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Thanksgiving break',
+                                      showarrow = TRUE),
+                                 list(x = "Oct 08", y = 13000,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Fall Break',
+                                      showarrow = TRUE),
+                                 list(x = "Apr 30", y = 12850,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Exams',
+                                      showarrow = TRUE),
+                                 list(x = "Jul 02", y = 3000,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Clemons closure',
+                                      showarrow = TRUE),
+                                 list(x = "Dec 03", y = 13200,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Exams',
+                                      showarrow = TRUE),
+                                 list( x = "Dec 24", y = 15000,
+                                       xref = 'x', yref = 'y',
+                                       text = 'Winter break',
+                                       showarrow = TRUE)))      
+             
+combined_weekly_plot
+```
+
+* Looking at unique user connections by week, the numubers are fairly consistent across the weeks during each semester, with expected drops during breaks.
+
+
+## Daily Averages of Unique User Connections | Spring, Summer, Fall
+
+The following figures show the average number of unique users connected to the Library's WiFi by day in Alderman, Clemons, and Harrison-Small. Each figure includes the average and a 95% confidence bound. 
+
+* Key question: As a proxy for library visitors, what's the typical pattern of unique user connections across a week while classes are in session, allowing for variation in spring, summer, and fall? Again, these measures emphasize distinct vistoros rather than number of visits.
+
+
+## Daily Averages-Spring
+
+```{r}
+# LW: Aggregating by location and day, adding variable for semester, removing
+# observations outside of fall, spring, and summer
+combined_daily <- wifi %>% 
+  group_by(location, date, day) %>% 
+  summarise(user = n_distinct(user)) %>% 
+  as.data.frame()
+
+combined_daily2 <- combined_daily #for later 
+
+# CF: I thought this would be a little more readable;
+# this automatically generates NA if no match is found
+combined_daily <- mutate(combined_daily, 
+                         semester= case_when(
+                           date >= "2018-01-15" & date <= "2018-05-11" ~ "Spring",
+                           date >= "2018-05-21" & date <= "2018-08-23" ~ "Summer",
+                           date >= "2018-08-24" & date <= "2018-12-18" ~ "Fall"))
+
+combined_daily <- combined_daily %>%
+  filter(!is.na(semester))
+```
+
+```{r}
+# Generating averages for each semester
+f1 <- function(x) c(Mean = mean(x), SE = sd(x)/sqrt(length(x)))
+
+combined_daily_fall <- do.call(data.frame, 
+                               aggregate(user~location+day, 
+                                         combined_daily[combined_daily$semester=='Fall', ],
+                                         FUN=f1))
+
+combined_daily_spring <- do.call(data.frame, 
+                               aggregate(user~location+day, 
+                                         combined_daily[combined_daily$semester=='Spring', ],
+                                         FUN=f1))
+
+combined_daily_summer <- do.call(data.frame, 
+                               aggregate(user~location+day, 
+                                         combined_daily[combined_daily$semester=='Summer', ],
+                                         FUN=f1))
+```
+
+```{r}
+# Combined plot for Spring
+daily_combined_spring  <- plot_ly(combined_daily_spring, x = ~day, y = ~user.Mean, 
+                                  color= ~location, type="bar", 
+                                error_y = ~list(array = user.SE,
+                             color = '#000000'))   %>%
+ layout(title = 'Average daily unique users, Spring semester',
+         yaxis = list(title="Unique users", range=c(0,5000)),
+        xaxis = list(title="Day"))
+
+daily_combined_spring
+```
+
+* Average user connections in the spring peak on Mondays and decreases throughout the week in all three library buildings.
+
+
+## Daily Averages-Summer
+
+```{r}
+# Combined plot for Summer
+daily_combined_summer <- plot_ly(combined_daily_summer, x = ~day, y = ~user.Mean, 
+                                  color= ~location, type="bar", 
+                                error_y = ~list(array = user.SE,
+                             color = '#000000'))   %>%
+ layout(title = 'Average daily unique users, Summer semester',
+         yaxis = list(title="Unique users", range=c(0,900)),
+        xaxis = list(title="Day"))
+
+daily_combined_summer
+```
+
+* The average number of user connections in the summer is relatively uniform from Monday to Thursday in Alderman. 
+
+
+## Daily Averages-Fall
+
+```{r}
+# Combined plot for Fall
+daily_combined_fall  <- plot_ly(combined_daily_fall, x = ~day, 
+                                y = ~user.Mean, 
+                                  color= ~location, type="bar", 
+                                error_y = ~list(array = user.SE,
+                             color = '#000000'))   %>%
+ layout(title = 'Average daily unique users, Fall semester',
+         yaxis = list(title="Unique users", range=c(0,6000)),
+        xaxis = list(title="Day"))
+
+daily_combined_fall
+```
+
+* Average distinct user connections in the fall peak on Wednesdays. Compared to the fall, the average distinct user connections incresaed notably in Alderman and decreased in Clemons.
+
+
+## Daily Total Unique User Connections | Alderman, Clemons, Harrison-Small
+
+The following figures show the total number of unique users connected to the Library's WiFi each day in Alderman, Clemons, and Harrison-Small. Each figure includes shading to demarcate key academic periods and breaks.
+
+* Key question: As a proxy for library visitors, how does the number of unique user connections vary across weeks? These measures emphasize the number of distinct visitors rather than the number of distinct visits. 
+
+## Daily Unique Users-Alderman
+
+```{r}
+combined_daily2 <- arrange(combined_daily2, date)
+combined_daily2$date <- format(as.POSIXct(combined_daily2$date),
+                               format = "%m-%d")
+combined_daily2 <- arrange(combined_daily2, date)
+```
+
+
+```{r ald, warning=FALSE}
+# One graph per location
+# Alderman graph
+total_daily_alderman  <- plot_ly(combined_daily2[combined_daily2$location=='alderman', ],
+                                x = ~date, y = ~user, color = I('skyblue3'),
+                                type = "scatter", mode = "lines") %>%
+  layout(shapes = list(
+               list(type = "rect",
+                 fillcolor = "darkgray", line = list(color = "darkgray"), 
+                 opacity = 0.2,
+                 x0 = "03-03", x1 = "03-11", xref = "x",
+                 y0 = 0, y1 = 5500, yref = "y"),
+               list(type = "rect",
+                 fillcolor = "red", line = list(color = "red"), 
+                 opacity = 0.2,
+                 x0 = "05-03", x1 = "05-11", xref = "x",
+                 y0 = 0, y1 = 5500, yref = "y"),
+               list(type = "rect",
+                 fillcolor = "darkgray", line = list(color = "darkgray"), opacity = 0.2,
+                 x0 = "10-06", x1 = "10-09", xref = "x",
+                 y0 = 0, y1 = 5500, yref = "y"),
+               list(type = "rect",
+                 fillcolor = "darkgray", line = list(color = "darkgray"), opacity = 0.2,
+                 x0 = "11-21", x1 = "11-25", xref = "x",
+                 y0 = 0, y1 = 5500, yref = "y"),
+               list(type = "rect",
+                 fillcolor = "red", line = list(color = "red"), opacity = 0.2,
+                 x0 = "12-10", x1 = "12-18", xref = "x",
+                 y0 = 0, y1 = 5500, yref = "y"),
+               list(type = "rect",
+                    fillcolor = "darkgray", line = list(color = "darkgray"), opacity = 0.3,
+                    x0 = "12-19", x1 = "12-31", xref = "x",
+                    y0 = 0, y1 = 5500, yref = "y")),
+         annotations = list(list( x = "03-05", y = 5100,
+                                       xref = 'x', yref = 'y',
+                                       text = 'Spring break',
+                                       showarrow = FALSE),
+                                 list( x = "11-23", y = 5650,
+                                       xref = 'x', yref = 'y',
+                                       text = 'Thanksgiving break',
+                                       showarrow = FALSE),
+                                 list( x = "10-07", y = 5450,
+                                       xref = 'x', yref = 'y',
+                                       text = 'Fall Break',
+                                       showarrow = FALSE),
+                                 list( x = "05-07", y = 5100,
+                                       xref = 'x', yref = 'y',
+                                       text = 'Exams',
+                                       showarrow = FALSE),
+                                 list(x = "12-13", y = 5350,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Exams',
+                                      showarrow = FALSE),
+                                 list( x = "12-31", y = 4200,
+                                       xref = 'x', yref = 'y',
+                                       text = 'Winter break',
+                                       showarrow = FALSE)))  %>%
+  layout(title = 'Total unique users per day in Alderman',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Day")) 
+             
+
+total_daily_alderman 
+```
+
+* The daily unique connections reveal the weekly cycles seen in the average figures and the expected declines over holidays and breaks. Daily totals  appear slightly higher in the fall relative to the spring.
+
+
+## Daily Unique Users-Clemons
+
+```{r clem, warning=FALSE}
+# Clemons - Need to double check what the reopen date was. I have it set to August 1 for now. 
+
+total_daily_clemons  <- plot_ly(combined_daily2[combined_daily2$location=='clemons', ],
+                                x = ~date, y = ~user, color= I('#E64B35B2'),
+        type = "scatter", mode = "lines") %>%
+  layout(title = 'Total unique users per day in Clemons',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Day"))
+
+total_daily_clemons   <- layout(total_daily_clemons, 
+             shapes = list(
+               list(type = "rect",
+                 fillcolor = "darkgray", line = list(color = "darkgray"), 
+                 opacity = 0.2, x0 = "03-03", x1 = "03-11", xref = "x",
+                 y0 = 0, y1 = 4200, yref = "y"),
+               list(type = "rect",
+                 fillcolor = "red", line = list(color = "red"), 
+                 opacity = 0.2,  x0 = "05-03", x1 = "05-11", xref = "x",
+                 y0 = 0, y1 = 4200, yref = "y"),
+               list(type = "rect", fillcolor = "darkgray", 
+                    line = list(color = "darkgray"), opacity = 0.2,
+                 x0 = "05-14", x1 = "08-01", xref = "x",
+                 y0 = 0, y1 = 4200, yref = "y"),
+               list(type = "rect", fillcolor = "darkgray", 
+                    line = list(color = "darkgray"), opacity = 0.2,
+                 x0 = "10-06", x1 = "10-09", xref = "x",
+                 y0 = 0, y1 = 4200, yref = "y"),
+               list(type = "rect", fillcolor = "darkgray", 
+                    line = list(color = "darkgray"), opacity = 0.2,
+                 x0 = "11-21", x1 = "11-25", xref = "x",
+                 y0 = 0, y1 = 4200, yref = "y"),
+               list(type = "rect", fillcolor = "red", 
+                    line = list(color = "red"), opacity = 0.2,
+                 x0 = "12-10", x1 = "12-18", xref = "x",
+                 y0 = 0, y1 = 4200, yref = "y"),
+               list(type = "rect", fillcolor = "darkgray", 
+                    line = list(color = "darkgray"), opacity = 0.3,
+                    x0 = "12-19", x1 = "12-31", xref = "x",
+                    y0 = 0, y1 = 4200, yref = "y")),
+             annotations = list(list(x = "03-05", y = 3700,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Spring break',
+                                      showarrow = FALSE),
+                                 list(x = "11-23", y = 4050,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Thanksgiving break',
+                                      showarrow = FALSE),
+                                 list(x = "10-07", y = 3300,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Fall Break',
+                                      showarrow = FALSE),
+                                 list(x = "05-07", y = 4350,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Exams',
+                                      showarrow = FALSE),
+                                 list(x = "06-24", y = 570,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Clemons closure',
+                                      showarrow = FALSE),
+                                 list(x = "12-13", y = 3550,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Exams',
+                                      showarrow = FALSE),
+                                 list(x = "12-30", y = 3100,
+                                       xref = 'x', yref = 'y',
+                                       text = 'Winter break',
+                                       showarrow = FALSE)))      
+             
+# CF: Winter break label
+total_daily_clemons
+```
+
+* The daily unique connections again reflect the patterns seen in the averages. Daily totals appear notably higher in the spring relative to the fall, likely in response to the continued closure of the first floor.
+
+
+## Daily Unique Users-Harrison-Small
+
+```{r har, warning=FALSE}
+total_daily_harrison  <- plot_ly(combined_daily2[combined_daily2$location=='harrison', ],
+                                x = ~date, y = ~user, color = I('#3C5488B2'),
+        type = "scatter", mode = "lines") %>%
+  layout(title = 'Total unique users per day in Harrison',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Day"))
+
+total_daily_harrison   <- layout(total_daily_harrison, 
+             shapes = list(
+               list(type = "rect",
+                 fillcolor = "gray", line = list(color = "gray"), 
+                 opacity = 0.2, x0 = "03-03", x1 = "03-11", xref = "x",
+                 y0 = 0, y1 = 2100, yref = "y"),
+               list(type = "rect",
+                 fillcolor = "red", line = list(color = "red"), 
+                 opacity = 0.2, x0 = "05-03", x1 = "05-11", xref = "x",
+                 y0 = 0, y1 = 2100, yref = "y"),
+               list(type = "rect",
+                 fillcolor = "gray", line = list(color = "gray"), 
+                 opacity = 0.2, x0 = "10-06", x1 = "10-09", xref = "x",
+                 y0 = 0, y1 = 2100, yref = "y"),
+               list(type = "rect",
+                 fillcolor = "gray", line = list(color = "gray"), 
+                 opacity = 0.2, x0 = "11-21", x1 = "11-25", xref = "x",
+                 y0 = 0, y1 = 2100, yref = "y"),
+               list(type = "rect",
+                 fillcolor = "red", line = list(color = "red"), 
+                 opacity = 0.2, x0 = "12-10", x1 = "12-18", xref = "x",
+                 y0 = 0, y1 = 2100, yref = "y"),
+               list(type = "rect",
+                    fillcolor = "gray", line = list(color = "gray"), 
+                    opacity = 0.3, x0 = "12-19", x1 = "12-31", xref = "x",
+                    y0 = 0, y1 = 2100, yref = "y")),
+             annotations = list(list(x = "03-05", y = 1550,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Spring break',
+                                      showarrow = FALSE),
+                                 list(x = "11-23", y =  1550,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Thanksgiving break',
+                                      showarrow = FALSE),
+                                 list(x = "10-07", y =  1150,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Fall Break',
+                                      showarrow = FALSE),
+                                 list(x = "05-07", y = 2050,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Exams',
+                                      showarrow = FALSE),
+                                 list(x = "12-13", y = 1800,
+                                      xref = 'x', yref = 'y',
+                                      text = 'Exams',
+                                      showarrow = FALSE),
+                                 list( x = "12-31", y = 1400,
+                                       xref = 'x', yref = 'y',
+                                       text = 'Winter break',
+                                       showarrow = FALSE )))      
+             
+total_daily_harrison
+```
+
+* Though not a primary student space, the weekly number of distinct wifi connections follows the academic cycle. The daily unique user connections is notably larger in the spring compared to the fall.
+
+
+## Daily Unique WiFi User Connections vs. Gate Counts | Alderman, Clemons, Harrison-Small
+
+The following figures show the total number of unique users connected to the Library's WiFi each day in Alderman, Clemons, and Harrison-Small along with the gate counts for each day. 
+
+* Key question: How do daily unique wifi user connections compare to gate counts?
+
+Note: In ongoing work, we're measuring the duration of visits which will allow us to better estimate the number of distinct visits rather than the number of distinct visitors in a given time period. This measure will be conceptually more similar to gate counts.
+
+
+## Daily Users vs. Gate Counts-Alderman
+
+```{r}
+# Adding to daily data 
+gatecount$date <- format(as.POSIXct(gatecount$date),
+                           format = "%m-%d")
+
+# CF: modified to use recode to create character vector, and hence eliminate warning
+gatecount <- gatecount %>%
+  select(-location) %>%
+  rename(gatecount=visitors, location=name) %>%
+  mutate(location = recode(location, 
+                           `ALD LIB` = "alderman",
+                           `CLEM LIB` = "clemons",
+                           `Harrison Small` = "harrison"))
+
+combined_daily2 <- left_join(combined_daily2, gatecount, by = c("location", "date"))
+```
+
+```{r}
+total_daily_alderman2 <- plot_ly(combined_daily2[combined_daily2$location=='alderman', ],
+             x = ~date, y= ~user, name = 'Wifi unique visitors', type = 'scatter', mode = 'lines') %>%
+  add_trace(x = ~date, y= ~gatecount, name='Gate counts') %>%
+  layout(title = 'Wifi unique visitors vs. gate counts in Alderman',
+         yaxis = list(title=""),
+         xaxis = list(title="Day")) 
+total_daily_alderman2
+```
+
+* In both semesters, the number of unique user connections in Alderman each day exceeds the gate counts; the reverse is true during the summer. 
+
+
+## Daily Users vs. Gate Counts-Clemons
+
+```{r}
+total_daily_clemons2 <- plot_ly(combined_daily2[combined_daily2$location=='clemons', ],
+             x = ~date, y= ~user, name = 'Wifi unique visitors', type = 'scatter', mode = 'lines') %>%
+  add_trace(x = ~date, y= ~gatecount, name='Gate counts') %>%
+  layout(title = 'Wifi unique visitors vs. gate counts in Clemons',
+         yaxis = list(title=""),
+         xaxis = list(title="Day")) 
+total_daily_clemons2
+```
+
+* Unique user wifi connections exceed gate counts in the spring and fall below gate counts in the fall. Gate counts will exceed the number of distinct users to the extent the same users make mulitple visits. 
+
+
+## Daily Users vs. Gate Counts-Harrison
+
+```{r}
+total_daily_harrison2 <- plot_ly(combined_daily2[combined_daily2$location=='harrison', ],
+             x = ~date, y= ~user, name = 'Wifi unique visitors', type = 'scatter', mode = 'lines') %>%
+  add_trace(x = ~date, y= ~gatecount, name='Gate counts') %>%
+  layout(title = 'Wifi unique visitors vs. gate counts in Harrison',
+         yaxis = list(title=""),
+         xaxis = list(title="Day")) 
+total_daily_harrison2
+```
+
+* The daily gate counts and unique user wifi connections diverge strongly in Harrison-Small, as individuals can be in this building without passing through the gate counter.
+
+
+## Average Unique WiFi User Connections by Half-Hour Increments | Alderman, Clemons, Harrison/ Weekdays, Weekends
+
+The following figures show the average number of unique users connected to the Library's WiFi over the course of a typical day in Alderman, Clemons, and Harrison-Small. Because the daily cycle will vary during the week and on weekends, the figures look at weekdays and weekends separately. Because the weekend cycle may vary across semesters, weekends are examiniend for both the fall and spring semesters. Each figure includes the average and a 95% confidence bound. 
+
+* Key question: As a proxy for library visitors, what's the typical pattern of unique user connections over the day? The average distinct user connections in each half-hour increment is a reasonable proxy of the average number of users in the library in any given half hour. 
+
+
+## Alderman-Weekdays
+
+```{r hh2, cache=TRUE}
+# Aggregating by time and location
+combined_hh <- wifi %>% 
+  group_by(time, location, day) %>% 
+  summarise(user = n_distinct(user))
+
+combined_hh$date <- format(as.POSIXct(combined_hh$time),
+                           format = "%m-%d")
+combined_hh$timestamp <- format(as.POSIXct(combined_hh$time),
+                                format = "%H:%M")
+```
+
+```{r}
+combined_hh <- mutate(combined_hh,
+                      semester= case_when(
+                        date >= "01-15" & date <= "05-11" ~ "Spring",
+                        date >= "05-21" & date <= "08-23" ~ "Summer",
+                        date >= "08-24" & date <= "12-18" ~ "Fall"))
+
+combined_hh <- combined_hh %>% filter(semester %in% c("Spring", "Summer", "Fall"))
+```
+
+```{r}
+# LW: Typical weekday in Fall: averaged Monday, Tuesday, Thursday. Error bars on
+# combined plots overlap too much so have to be separate graphs. Alderman graph:
+
+combined_hh_fall_wkdy <- combined_hh %>%
+  filter(semester=="Fall" & day %in% c("Mon", "Tue", "Thu"))
+
+combined_hh_fall_wkdy <- do.call(data.frame, 
+                                 aggregate(user~timestamp+location,
+                                           combined_hh_fall_wkdy, FUN=f1))
+
+combined_hh_fall_wkdy <- mutate(combined_hh_fall_wkdy, 
+                                ub=(user.Mean+user.SE), 
+                                lb=(user.Mean-user.SE))
+
+
+hh_fall_wkdy_plot_a <- plot_ly(combined_hh_fall_wkdy[combined_hh_fall_wkdy$location=='alderman', ],
+                                                    x = ~timestamp, y = ~user.Mean, 
+                                   color= ~location, 
+        type = "scatter", mode = "lines", showlegend = FALSE) %>%
+  
+ add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  
+  layout(title = 'Average number of unique users in Alderman on a typical weekday, Fall semester',
+         yaxis = list(title="Average unique users", range=c(0,1000)),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Typical spring semester day: Tuesday, Wednesday, Thursday average. 
+# Alderman graph: 
+  
+combined_hh_spring_wkdy <- combined_hh %>%
+  filter(semester=="Spring" & day %in% c("Tue", "Wed", "Thu"))
+
+combined_hh_spring_wkdy <- do.call(data.frame, 
+                                   aggregate(user~timestamp+location, 
+                                             combined_hh_spring_wkdy, FUN=f1))
+
+combined_hh_spring_wkdy <- mutate(combined_hh_spring_wkdy, 
+                                  ub=(user.Mean+user.SE), lb=(user.Mean-user.SE))
+```
+
+```{r}
+
+hh_spring_wkdy_plot_a <- plot_ly(combined_hh_spring_wkdy[combined_hh_spring_wkdy$location=='alderman', ],
+                                                    x = ~timestamp, y = ~user.Mean, color= ~location, 
+                                 type = "scatter", mode = "lines", showlegend = FALSE)  %>%
+  
+ add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  layout(title = 'Average number of unique users in Alderman on a typical weekday, Spring semester',
+         yaxis = list(title="Average unique users", range=c(0,1000)),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Alderman weekday, fall and spring 
+hh_wkdy_plot_a <- subplot(hh_fall_wkdy_plot_a, hh_spring_wkdy_plot_a) %>%
+  layout(title = 'Average number of unique users in Alderman on a typical weekday',
+          yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))  %>% layout(annotations = list(
+ list(x = 0.2 , y = 1.00, text = "Fall", showarrow = F, xref='paper', yref='paper'),
+  list(x = 0.8 , y = 1.00, text = "Spring", showarrow = F, xref='paper', yref='paper'))
+)
+
+hh_wkdy_plot_a
+```
+
+* The average number of distinct users is typically higher in the Fall than in the Spring. In both semesters, we see peaks around 3pm and 1:30pm.
+
+
+## Alderman-Fall Weekends
+
+```{r}
+# Saturday and Sunday in fall 
+combined_hh_fall_sat <- combined_hh %>%
+  filter(semester=="Fall" & day =="Sat")
+
+combined_hh_fall_sat <- do.call(data.frame, 
+                                aggregate(user~timestamp+location, 
+                                          combined_hh_fall_sat, FUN=f1))
+
+combined_hh_fall_sun <- combined_hh %>%
+  filter(semester=="Fall" & day =="Sun")
+
+combined_hh_fall_sun <- do.call(data.frame, 
+                                aggregate(user~timestamp+location, 
+                                          combined_hh_fall_sun, FUN=f1))
+
+combined_hh_fall_sat <- mutate(combined_hh_fall_sat, 
+                               ub=(user.Mean+user.SE), lb=(user.Mean-user.SE))
+
+combined_hh_fall_sun <- mutate(combined_hh_fall_sun, 
+                               ub=(user.Mean+user.SE), lb=(user.Mean-user.SE))
+```
+
+```{r}
+# Saturday Alderman, fall
+hh_fall_sat_plot_a <- plot_ly(combined_hh_fall_sat[combined_hh_fall_sat$location=='alderman', ],
+                                                    x = ~timestamp, y = ~user.Mean, 
+                              color= ~location, type = "scatter", mode = "lines", 
+                              showlegend = FALSE)  %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  layout(title = 'Average number of unique users in Alderman on Saturday, Fall semester',
+         yaxis = list(title="Average unique users", range=c(0,900)),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Sunday Alderman, fall
+hh_fall_sun_plot_a <- plot_ly(combined_hh_fall_sun[combined_hh_fall_sun$location=='alderman', ],
+                              x = ~timestamp, y = ~user.Mean, 
+                              color= ~location, 
+                              type = "scatter", mode = "lines", 
+                              showlegend = FALSE)  %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  layout(title = 'Average number of unique users in Alderman on Sunday, Fall semester',
+         yaxis = list(title="Average unique users", range=c(0,900)),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Weekend Alderman plot for fall 
+hh_fall_wknd_plot_a <- subplot(hh_fall_sat_plot_a, hh_fall_sun_plot_a) %>%
+  layout(title = 'Average number of unique users in Alderman on the weekend, Fall',
+          yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))  %>% 
+  layout(annotations = list(
+    list(x = 0.2 , y = 1.00, text = "Saturday", 
+         showarrow = F, xref='paper', yref='paper'),
+    list(x = 0.8 , y = 1.00, text = "Sunday", 
+         showarrow = F, xref='paper', yref='paper')))
+
+hh_fall_wknd_plot_a
+```
+
+* The average number of distinct users connected to wifi peaks at 3:30pm on both Saturdays and Sundays in the fall.
+
+
+## Alderman-Spring Weekends
+
+```{r}
+# Saturday and Sunday in Spring
+combined_hh_spring_sat <- combined_hh %>%
+  filter(semester=="Spring" & day =="Sat")
+
+combined_hh_spring_sat <- do.call(data.frame, 
+                                  aggregate(user~timestamp+location, 
+                                            combined_hh_spring_sat, FUN=f1))
+
+combined_hh_spring_sun <- combined_hh %>%
+  filter(semester=="Spring" & day =="Sun")
+
+combined_hh_spring_sun <- do.call(data.frame, 
+                                  aggregate(user~timestamp+location, 
+                                            combined_hh_spring_sun, FUN=f1))
+
+combined_hh_spring_sat <- mutate(combined_hh_spring_sat, 
+                                 ub=(user.Mean+user.SE), lb=(user.Mean-user.SE))
+
+combined_hh_spring_sun <- mutate(combined_hh_spring_sun, 
+                                 ub=(user.Mean+user.SE), lb=(user.Mean-user.SE))
+```
+
+```{r}
+# Saturday Alderman, spring
+hh_spring_sat_plot_a <- plot_ly(combined_hh_spring_sat[combined_hh_spring_sat$location=='alderman', ],
+                                                    x = ~timestamp, y = ~user.Mean, 
+                                color= ~location, type = "scatter", mode = "lines", 
+                                showlegend = FALSE) %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  
+  layout(title = 'Average number of unique users in Alderman on Saturday, Spring semester',
+         yaxis = list(title="Average unique users", range=c(0,750)),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Sunday Alderman, spring
+hh_spring_sun_plot_a <- plot_ly(combined_hh_spring_sun[combined_hh_spring_sun$location=='alderman', ],
+                                x = ~timestamp, y = ~user.Mean, color= ~location, 
+                                type = "scatter", mode = "lines",  showlegend = FALSE) %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  layout(title = 'Average number of unique users in Alderman on Sunday, Spring semester',
+         yaxis = list(title="Average unique users", range=c(0,750)),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Weekend Alderman plot
+hh_spring_wknd_plot_a <- subplot(hh_spring_sat_plot_a, hh_spring_sun_plot_a) %>%
+  layout(title = 'Average number of unique users in Alderman on the weekend, Spring',
+          yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))  %>% layout(annotations = list(
+ list(x = 0.2 , y = 1.00, text = "Saturday", showarrow = F, 
+      xref='paper', yref='paper'),
+  list(x = 0.8 , y = 1.00, text = "Sunday", showarrow = F, 
+       xref='paper', yref='paper')))
+
+hh_spring_wknd_plot_a
+```
+
+* The average number of distinct users connected to wifi peaks at 3pm on both Saturdays and Sundays. The average number of distinct users connected throughout the weekend is sligtly lower in the spring compared to fall.
+
+
+## Clemons-Weekdays
+
+```{r}
+# Clemons weekday, Fall 
+hh_fall_wkdy_plot_c <- plot_ly(combined_hh_fall_wkdy[combined_hh_fall_wkdy$location=='clemons', ],
+                                                    x = ~timestamp, y = ~user.Mean, 
+                               color= ~location, type = "scatter", mode = "lines", 
+                               showlegend = FALSE) %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  
+  layout(title = 'Average number of unique users in Clemons on a typical weekday, Fall semester',
+         yaxis = list(title="Average unique users", range=c(0,950)),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Clemons, Spring
+hh_spring_wkdy_plot_c <- plot_ly(combined_hh_spring_wkdy[combined_hh_spring_wkdy$location=='clemons', ],
+                                                    x = ~timestamp, y = ~user.Mean, 
+                                 color= ~location, 
+                                 type = "scatter", mode = "lines", showlegend = FALSE)  %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  layout(title = 'Average number of unique users in Clemons on a typical weekday, Spring semester',
+         yaxis = list(title="Average unique users", range=c(0,950)),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Clemons weekday, fall and spring 
+hh_wkdy_plot_c <- subplot(hh_fall_wkdy_plot_c, hh_spring_wkdy_plot_c) %>%
+  layout(title = 'Average number of unique users in Clemons on a typical weekday',
+          yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))  %>% layout(annotations = list(
+ list(x = 0.2 , y = 1.00, text = "Fall", showarrow = F, xref='paper', yref='paper'),
+  list(x = 0.8 , y = 1.00, text = "Spring", showarrow = F, xref='paper', yref='paper')))
+
+hh_wkdy_plot_c
+```
+
+* The average number of distinct users in Clemons is typically higher in the Spring than in the Fall. In the fall, peaks occur at 3pm, 4:30pm, and 8pm; in the spring, peaks occur at 3pm, 4:30pm, and 9pm.
+
+
+## Clemons-Fall Weekends
+
+```{r}
+# Saturday Clemons, fall
+hh_fall_sat_plot_c <- plot_ly(combined_hh_fall_sat[combined_hh_fall_sat$location=='clemons', ],
+                                                    x = ~timestamp, y = ~user.Mean, 
+                                   color= ~location, type = "scatter", mode = "lines", 
+                              showlegend = FALSE) %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  layout(title = 'Average number of unique users in Clemons on Saturday, Fall semester',
+         yaxis = list(title="Average unique users", range=c(0,800)),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Sunday Clemons, fall
+hh_fall_sun_plot_c <- plot_ly(combined_hh_fall_sun[combined_hh_fall_sun$location=='clemons', ],
+                                                    x = ~timestamp, y = ~user.Mean, 
+                              color= ~location, type = "scatter", mode = "lines", 
+                              showlegend = FALSE) %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  layout(title = 'Average number of unique users in Clemons on Sunday, Fall semester',
+         yaxis = list(title="Average unique users", range=c(0,800)),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Weekend Clemons plot for fall 
+hh_fall_wknd_plot_c <- subplot(hh_fall_sat_plot_c, hh_fall_sun_plot_c) %>%
+  layout(title = 'Average number of unique users in Clemons on the weekend, Fall',
+          yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))  %>% layout(annotations = list(
+ list(x = 0.2 , y = 1.00, text = "Saturday", showarrow = F, xref='paper', yref='paper'),
+  list(x = 0.8 , y = 1.00, text = "Sunday", showarrow = F, xref='paper', yref='paper'))
+)
+
+hh_fall_wknd_plot_c
+```
+
+* The average number of distinct users connected to Clemons wifi peaks at 3:30pm on both Saturdays and Sundays in the fall.
+
+
+## Clemons-Spring Weekends
+
+```{r}
+# Saturday Clemons, spring
+hh_spring_sat_plot_c <- plot_ly(combined_hh_spring_sat[combined_hh_spring_sat$location=='clemons', ],
+                                                    x = ~timestamp, y = ~user.Mean, 
+                                   color= ~location, type = "scatter", 
+                                mode = "lines", showlegend = FALSE) %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  
+  
+  layout(title = 'Average number of unique users in Clemons on Saturday, Spring',
+         yaxis = list(title="Average unique users", range=c(0,1200)),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Sunday Clemons, spring
+hh_spring_sun_plot_c <- plot_ly(combined_hh_spring_sun[combined_hh_spring_sun$location=='clemons', ],
+                                                    x = ~timestamp, y = ~user.Mean, 
+                                color= ~location, type = "scatter", mode = "lines", 
+                                showlegend = FALSE) %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  layout(title = 'Average number of unique users in Clemons on Sunday, Spring semester',
+         yaxis = list(title="Average unique users", range=c(0,1200)),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Weekend Clemons plot for spring
+hh_spring_wknd_plot_c <- subplot(hh_spring_sat_plot_c, hh_spring_sun_plot_c) %>%
+  layout(title = 'Average number of unique users in Clemons on the weekend, Spring semester',
+          yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))  %>% layout(annotations = list(
+ list(x = 0.2 , y = 1.00, text = "Saturday", showarrow = F, xref='paper', yref='paper'),
+  list(x = 0.8 , y = 1.00, text = "Sunday", showarrow = F, xref='paper', yref='paper'))
+)
+
+hh_spring_wknd_plot_c
+```
+
+* The average number of distinct users connected to wifi peaks at 4pm on both Saturdays and Sundays. The average number of distinct users connected throughout the weekend is slightly higher in the spring compared to fall.
+
+
+## Harrison-Small-Weekdays
+
+```{r}
+# Harrison weekday, fall 
+hh_fall_wkdy_plot_h <- plot_ly(combined_hh_fall_wkdy[combined_hh_fall_wkdy$location=='harrison', ],
+                               x = ~timestamp, y = ~user.Mean, color= ~location, 
+                               type = "scatter", mode = "lines", showlegend = FALSE) %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  layout(title = 'Average number of unique users in Harrison on a typical weekday, Fall semester',
+         yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Harrison, Spring
+hh_spring_wkdy_plot_h <- plot_ly(combined_hh_spring_wkdy[combined_hh_spring_wkdy$location=='harrison', ],
+                                 x = ~timestamp, y = ~user.Mean, color= ~location,   
+                                 type = "scatter", mode = "lines", showlegend = FALSE)  %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  layout(title = 'Average number of unique users in Harrison on a typical weekday, Spring semester',
+         yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Harrison weekday, fall and spring 
+hh_wkdy_plot_h <- subplot(hh_fall_wkdy_plot_h, hh_spring_wkdy_plot_h) %>%
+  layout(title = 'Average number of unique users in Harrison on a typical weekday',
+          yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))  %>% layout(annotations = list(
+ list(x = 0.2 , y = 1.00, text = "Fall", showarrow = F, xref='paper', yref='paper'),
+  list(x = 0.8 , y = 1.00, text = "Spring", showarrow = F, xref='paper', yref='paper'))
+)
+
+hh_wkdy_plot_h
+```
+
+* The average number of distinct users in Harrison-Small is consistent across semesters, with peaks at 1:30pm, 3pm, and 4:30pm.
+
+
+## Harrison-Small-Fall Weekends
+
+```{r}
+# Saturday Harrison, fall
+hh_fall_sat_plot_h <- plot_ly(combined_hh_fall_sat[combined_hh_fall_sat$location=='harrison', ],
+                              x = ~timestamp, y = ~user.Mean, color= ~location, 
+                              type = "scatter", mode = "lines", showlegend = FALSE)  %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  layout(title = 'Average number of unique users in Harrison on Saturday, Fall semester',
+         yaxis = list(title="Average unique users", range=c(0,65)),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Sunday Harrison, fall
+hh_fall_sun_plot_h <- plot_ly(combined_hh_fall_sun[combined_hh_fall_sun$location=='harrison', ],
+                              x = ~timestamp, y = ~user.Mean, color= ~location, 
+                              type = "scatter", mode = "lines", showlegend = FALSE) %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  layout(title = 'Average number of unique users in Harrison on Sunday, Fall semester',
+         yaxis = list(title="Average unique users", range=c(0,65)),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Weekend Harrison plot for fall 
+hh_fall_wknd_plot_h <- subplot(hh_fall_sat_plot_h, hh_fall_sun_plot_h) %>%
+  layout(title = 'Average number of unique users in Harrison on the weekend, Fall',
+          yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))  %>% layout(annotations = list(
+ list(x = 0.2 , y = 1.00, text = "Saturday", showarrow = F, xref='paper', yref='paper'),
+  list(x = 0.8 , y = 1.00, text = "Sunday", showarrow = F, xref='paper', yref='paper')))
+
+hh_fall_wknd_plot_h
+```
+
+* The average number of distinct users connected to Harrison-Small wifi peaks at 2pm on Saturday and at 6:30pm on Sundays in the fall.
+
+
+## Harrison-Small-Spring Weekends
+
+```{r}
+# Saturday Harrison, spring
+hh_spring_sat_plot_h <- plot_ly(combined_hh_spring_sat[combined_hh_spring_sat$location=='harrison', ],
+                                x = ~timestamp, y = ~user.Mean, color= ~location, 
+                                type = "scatter", mode = "lines", showlegend = FALSE) %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  
+  
+  layout(yaxis = list(title="Average unique users", range=c(0,85)),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Sunday Harrison, spring
+hh_spring_sun_plot_h <- plot_ly(combined_hh_spring_sun[combined_hh_spring_sat$location=='harrison', ],
+                                x = ~timestamp, y = ~user.Mean, color= ~location, 
+                                type = "scatter", mode = "lines", showlegend = FALSE) %>%
+  add_trace(y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  
+  
+  layout(yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Creating Harrison weekend plot
+hh_spring_wknd_plot_h <- subplot(hh_spring_sat_plot_h, hh_spring_sun_plot_h) %>%
+  layout(title = 'Average number of unique users in Harrison on the weekend, Spring',
+          yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))  %>% layout(annotations = list(
+ list(x = 0.2 , y = 1.00, text = "Saturday", showarrow = F, xref='paper', yref='paper'),
+  list(x = 0.8 , y = 1.00, text = "Sunday", showarrow = F, xref='paper', yref='paper'))
+)
+
+hh_spring_wknd_plot_h 
+```
+
+* The average number of distinct users connected to wifi peaks on at 1pm on Saturdays and 5:30pm on Sundays. The average number of distinct users connected throughout the weekend is slightly higher in the spring compared to fall.
+
+
+## Summer Weekdays
+
+```{r summer, warning=FALSE}
+# Typical weekday in summer: averaging Monday through Thursday  
+combined_hh_summer_wkdy <- combined_hh %>%
+  filter(semester=="Summer" & day %in% c("Mon", "Tue", "Wed", "Thu") &
+           location %in% c("alderman", "harrison"))
+
+combined_hh_summer_wkdy <- do.call(data.frame, 
+                                   aggregate(user~timestamp+location, 
+                                             combined_hh_summer_wkdy, FUN=f1))
+
+combined_hh_summer_wkdy  <- mutate(combined_hh_summer_wkdy, 
+                                   ub=(user.Mean+user.SE), lb=(user.Mean-user.SE))
+
+
+
+hh_summer_wkdy_plot <- plot_ly(combined_hh_summer_wkdy,
+                               x = ~timestamp, y = ~user.Mean, 
+                               color= ~location, 
+                               type = "scatter", mode = "lines") %>%
+  add_trace(data=combined_hh_summer_wkdy[ which(combined_hh_summer_wkdy$location=='alderman'), ],
+            y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(data=combined_hh_summer_wkdy[ which(combined_hh_summer_wkdy$location=='alderman'), ],
+            y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(data=combined_hh_summer_wkdy[ which(combined_hh_summer_wkdy$location=='harrison'), ],
+            y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(data=combined_hh_summer_wkdy[ which(combined_hh_summer_wkdy$location=='harrison'), ],
+            y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+
+  
+  layout(title = 'Average number of unique users on a typical weekday, Summer',
+         yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))
+
+hh_summer_wkdy_plot
+```
+
+* Turning to summer, the average number of distinct users connected to Alderman wifi peaks at 12:30pm. The average number of distinct users connected to Harrison-Small wifi peaks at 2pm.
+
+
+## Summer Weekends
+
+```{r harsum1, warning=FALSE}
+# Typical Saturday in summer
+combined_hh_summer_sat <- combined_hh %>%
+  filter(semester=="Summer" & day =="Sat" &
+           location %in% c("alderman", "harrison"))
+
+combined_hh_summer_sat <- do.call(data.frame, 
+                                  aggregate(user~timestamp+location, 
+                                            combined_hh_summer_sat, FUN=f1))
+
+combined_hh_summer_sat  <- mutate(combined_hh_summer_sat, 
+                                  ub=(user.Mean+user.SE), 
+                                  lb=(user.Mean-user.SE))
+
+hh_summer_sat_plot <- plot_ly(combined_hh_summer_sat,
+                              x = ~timestamp, y = ~user.Mean,
+                              color= ~location, 
+                              type = "scatter", mode = "lines") %>%
+  add_trace(data=combined_hh_summer_sat[ which(combined_hh_summer_sat$location=='alderman'), ],
+            y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(data=combined_hh_summer_sat[ which(combined_hh_summer_sat$location=='alderman'), ],
+            y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(data=combined_hh_summer_sat[ which(combined_hh_summer_sat$location=='harrison'), ],
+            y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(data=combined_hh_summer_sat[ which(combined_hh_summer_sat$location=='harrison'), ],
+            y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  
+  layout(title = 'Average number of unique users on a typical Saturday, Summer',
+         yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))
+```
+
+```{r harsum2, warning=FALSE}
+# Typical Sunday in summer (Is Harrison open on the weekends?)
+combined_hh_summer_sun <- combined_hh %>%
+  filter(semester=="Summer" & day =="Sun" &
+           location %in% c("alderman", "harrison"))
+
+combined_hh_summer_sun <- do.call(data.frame, 
+                                  aggregate(user~timestamp+location, 
+                                            combined_hh_summer_sun, FUN=f1))
+
+combined_hh_summer_sun  <- mutate(combined_hh_summer_sun, 
+                                  ub=(user.Mean+user.SE), 
+                                  lb=(user.Mean-user.SE))
+
+hh_summer_sun_plot <- plot_ly(combined_hh_summer_sun,
+                              x = ~timestamp, y = ~user.Mean, 
+                                   color= ~location, 
+                              type = "scatter", mode = "lines", showlegend = FALSE)  %>%
+  add_trace(data=combined_hh_summer_sun[ which(combined_hh_summer_sun$location=='alderman'), ],
+            y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(data=combined_hh_summer_sun[ which(combined_hh_summer_sun$location=='alderman'), ],
+            y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(data=combined_hh_summer_sun[ which(combined_hh_summer_sun$location=='harrison'), ],
+            y = ~lb, type = 'scatter', mode = 'lines',
+            fill = 'none',  line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  add_trace(data=combined_hh_summer_sun[ which(combined_hh_summer_sun$location=='harrison'), ],
+            y = ~ub, type = 'scatter', mode = 'lines',
+            fill = 'tonexty', line = list(color = 'transparent'),
+            showlegend = FALSE)  %>%
+  layout(title = 'Average number of unique users on a typical Sunday, Summer',
+         yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))
+```
+
+```{r}
+# Creating Summer weekend plot
+hh_summer_wknd_plot <- subplot(hh_summer_sat_plot, hh_summer_sun_plot) %>%
+  layout(title = 'Average number of unique users on a typical weekend, Summer',
+          yaxis = list(title="Average unique users"),
+         xaxis = list(title="Time"))  %>% layout(annotations = list(
+ list(x = 0.2 , y = 1.00, text = "Saturday", showarrow = F, xref='paper', yref='paper'),
+  list(x = 0.8 , y = 1.00, text = "Sunday", showarrow = F, xref='paper', yref='paper'))
+)
+
+hh_summer_wknd_plot 
+```
+
+* In both Alderman and Harrison-Small, the average number of distinct users connected to wifi increases monotonically from a bit before opening hours until the mid-day peak.
+
+
+## Total Unique Visitors each Half Hour | Alderman, Clemons, Harrison-Small
+
+The following figures show the total number of unique users connected to the Library's WiFi for every half-hour increment over the course of the year in Alderman, Clemons, and Harrison-Small.  
+
+* Key question: What is the pattern of user connections across the smallest unit of time available to us? What are the busiest time increments throughout the year? Again, the average distinct user connections in each half-hour increment is currently the best proxy of the average number of users in the library in any given half hour. 
+
+Note: These figures are not terribly revealing. The average, or typical, figures above offer a better summary.
+
+
+## Number of visitors-Alderman
+
+```{r}
+# Alderman
+
+combined_hh <- arrange(combined_hh, time)
+
+total_unique_hh_a <- plot_ly(combined_hh[combined_hh$location=='alderman', ], 
+                           x = ~time, y = ~user,  
+                           type = 'scatter', mode = 'lines', fill = 'tozeroy') %>%
+  layout(title = 'Total number of unique users by half hour in Alderman',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Time"))
+total_unique_hh_a
+```
+
+* The day with the maximum number of users connected in a single half-hour is May 2 at 1pm (reading day) in the spring; in the fall, it's December 4 at 3pm (two days before courses end).
+
+
+## Number of visitors-Clemons
+
+```{r}
+# Clemons
+total_unique_hh_c <- plot_ly(combined_hh[combined_hh$location=='clemons', ], 
+                           x = ~time, y = ~user,  
+                           type = 'scatter', mode = 'lines', fill = 'tozeroy') %>%
+  layout(title = 'Total number of unique users by half hour in Clemons',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Time"))
+total_unique_hh_c
+```
+
+* The day with the maximum number of users connected in a single half-hour is May 2 at 2pm (reading day) in the spring; in the fall, it's December 2 at 3pm and December 4 at 7:30pm and 8pm (classes ended on December 6).
+
+
+## Number of visitors-Harrison-Small
+
+```{r}
+# Harrison
+total_unique_hh_h <- plot_ly(combined_hh[combined_hh$location=='harrison', ], 
+                           x = ~time, y = ~user,  
+                           type = 'scatter', mode = 'lines', fill = 'tozeroy') %>%
+  layout(title = 'Total number of unique users by half hour in Harrison',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Time"))
+
+total_unique_hh_h
+
+```
+
+* The day with the maximum number of users connected in a single half-hour is May 2 at 1:30pm (reading day) in the spring; in the fall, it is September 17 at 1:30pm (coinciding with the onset of a Library Townhall meeting).
+
+
+## Final Notes
+
+* This analysis focuses on user ids, capturing all unique users with any connected device and discarding multiple devices associated with the same user id.
+* Wifi connections where user ids are missing are assigned a pseudo-id based on device id. This could generate a small overestimate if missing user ids have multiple devices connected but is preferable to treating all missing user ids as a single user or discarding all connections for users without ids.
+* Library staff devices are not excluded. This could generate a small overestimate if staff devices remain in the building and connected while staff members are elsewhere.
+* This counts any user who is connected no matter how briefly, which increases the probability that at least some connections are for users not physically in the building (walk-bys). We're currently working on (1) estimating the duration of visits and (2) estimating a walk-by rate based on connections during building closures.

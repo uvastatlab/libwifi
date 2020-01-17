@@ -1,0 +1,303 @@
+---
+title: "WiFi User Affiliations 2018"
+author: "StatLab: Laura White, Clay Ford, Michele Claibourn"
+date: "Fall 2019"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, fig.align='center', message = FALSE)
+```
+
+```{r}
+library(knitr)
+library(tidyverse)
+library(dplyr)
+library(Hmisc)
+library(plotly)
+library(lubridate)
+library(scales)
+```
+
+```{r cache=TRUE}
+# read data
+wifi <- readRDS("../WiFi_data/wifi.rds")
+```
+
+```{r}
+# prep data
+# assign user affiliation, version 2
+wifi <- wifi %>% 
+  mutate(student = if_else(!is.na(Registrar_School), 1, 0),
+         employee = if_else(student == 0 & str_detect(Display_Department, "^E"), 1, 0),
+         alumni = if_else(student == 0 & employee == 0 & str_detect(uvaPersonIAMAffiliation, "alumni|former_student"), 1, 0))
+
+wifi <- wifi %>% 
+  mutate(affiliation = case_when(
+    employee == 1 & str_detect(uvaPersonIAMAffiliation, "faculty") ~ "faculty",
+    employee == 1 & !str_detect(uvaPersonIAMAffiliation, "faculty") ~ "staff",
+    is.na(Display_Department) & str_detect(uvaPersonIAMAffiliation, "staff") ~ "staff",
+    is.na(Display_Department) & str_detect(uvaPersonIAMAffiliation, "emeritus") ~ "faculty",
+    student == 1 & str_detect(Registrar_School, "U$|UN$")  ~ "ugrad",
+    student == 1 & !str_detect(Registrar_School, "U$|UN$") ~ "grad",
+    alumni == 1 ~ "alumni",
+    is.na(uvaPersonIAMAffiliation) ~ "unknown",
+    TRUE ~ "other"
+  ))
+
+
+wifi <- wifi %>% 
+  mutate(affiliation = if_else(employee == 1 & str_detect(MBU, "LB"), "library", affiliation))
+
+# format date/time
+wifi$date <- as_date(wifi$time)
+
+# generate semesters/academic periods
+wifi <- mutate(wifi, semester = case_when(
+  date >= "2018-01-01" & date <= "2018-01-16" ~ "January term",
+  date >= "2018-01-17" & date <= "2018-05-20" ~ "Spring",
+  date >= "2018-05-21" & date <= "2018-08-27" ~ "Summer",
+  date >= "2018-08-28" & date <= "2018-12-31" ~ "Fall"))
+wifi <- wifi %>% mutate(semester = factor(semester, levels = c("January term", "Spring", "Summer", "Fall")))
+
+# separate alderman/clemons
+alderman <- filter(wifi, location=="alderman")
+clemons <- filter(wifi, location=="clemons")
+
+# Function to count the number of unique values
+total_unique <- function(var) {
+  x <- length(unique(var))
+  return(x)
+}
+```
+
+
+## User affiliation
+Users could have multiple affiliations, but these appeared to be designated without a set order (e.g., some users were students^student_worder, others were student_worker^student). We used these in combination with Registrar_School, assigned for students, and Display_Deparment and MBU (major business unit), assigned for employees, to generate a primarily affiliation.
+
+1. users with an assigned school in Registrar_School are categorized as students, 
+2. among students, those with a school designation ending in U or UN are assigned as undergraduates; the remaining students are assigned as graduate students;
+3. users with a Display_Department beginning with E are categorized as (non-student) employees,
+4. among employees, those with "faculty" listed as an affiliation are assigned as faculty; the remaining employees are assigned as staff,
+5. among employees, those assigned to "LB" in MBU are assigned "library staff", overriding a prior assignment;
+6. users who are neither students nor employees, but with "alumni" or "former_student" listed as an affiliation are assigned "alumni";
+7. users with missing user information assigned unknown;
+8. all remaining users are assigned "other".
+
+## Breakdown of user affiliation
+The resulting user affiliation breakdown is:
+
+```{r}
+wifi %>% 
+  group_by(affiliation) %>% 
+  summarise(n = n(),
+            percent = percent(n/nrow(wifi), 1),
+            distinct = n_distinct(user),
+            distinct_percent = percent(distinct/length(unique(wifi$user)), 2)) %>% 
+  kable(col.names = c("Affiliation", "N (Connections)", "Percent", "Distinct N (Users)", "Distinct Percent"), align = c("l", "c", "c", "c", "c"))
+
+```
+
+N (Connections) represents each 1/2 hour for which a user is connected; Distinct N (Users) counts each unique user id only once. Thus, while 69% of the wifi connections across all half-hour increments are for undergraduates, undergraduate students make up 40% of the unique users to the library throughout the year.
+
+
+## Total unique users by affiliation in Alderman
+
+```{r}
+semester <- alderman %>% 
+  group_by(semester, affiliation) %>% 
+  summarise(user = n_distinct(user))
+
+semester_plot_ald  <- plot_ly(semester, x = ~semester, y = ~user, 
+                                   color= ~affiliation, type="bar")   %>%
+  layout(title = 'Total unique users by affiliation in Alderman',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Semester"))
+
+semester_plot_ald
+```
+
+Across each academic period, undergraduate students represnet a far higher number of library visitors. Graduate students and University staff (exluding library employees) are the next most common, followed by faculty. Compared to undergraduates, the number of distinct visitors among grad students, staff, and faculty is fairly constant across Fall, Spring, and Summer.
+
+## Total unique users by affiliation in Clemons
+```{r}
+semester <- clemons %>% 
+  group_by(semester, affiliation) %>% 
+  summarise(user = n_distinct(user))
+
+semester_plot_clem  <- plot_ly(semester, x = ~semester, y = ~user, 
+                              color= ~affiliation, type="bar")   %>%
+  layout(title = 'Total unique users by affiliation in Clemons',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Semester"))
+
+semester_plot_clem
+```
+
+Undergraduate students represent an even higher proportion of Clemons visitors, again with a greater number in the Fall compared to the Spring. Clemons sees about half as many distinct graduate student visitors as Alderman each semeseter.
+
+## Total unique users by month
+The following graphs present the number of distinct visitors each month by affilitation in Alderman and in Clemons. 
+
+## Total unique users by month in Alderman
+```{r}
+month_ald <- aggregate(user~month+affiliation, data=alderman, FUN=total_unique)
+
+monthly_plot_ald <- plot_ly(month_ald, x = ~month, y = ~user, 
+                                 color= ~affiliation, 
+                                 type = "scatter", mode = "lines") %>%
+  layout(title = 'Total unique users by month in Alderman',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Month"))
+
+monthly_plot_ald 
+```
+
+
+## Total unique users by month in Clemons 
+```{r}
+month_clem <- aggregate(user~month+affiliation, data=clemons, FUN=total_unique)
+monthly_plot_clem <- plot_ly(month_clem, x = ~month, y = ~user, 
+                            color= ~affiliation, 
+                            type = "scatter", mode = "lines") %>%
+  layout(title = 'Total unique users by month in Clemons',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Month"))
+
+monthly_plot_clem
+```
+
+## Total unique users per day
+The final set of figures shows the unique undergraduate and graudate student visitors, faculty visitors, and staff visitors to Alderman each day and to Clemons each day. When comparing these graphs, keep in mind that the range of the y-axis is quite different across type of user.
+
+## Total unique underaduate students per day in Alderman
+```{r}
+daily_ald <- alderman %>% 
+  group_by(affiliation, date) %>% 
+  summarise(user = n_distinct(user)) %>% 
+  mutate(day = wday(date, label = TRUE, abbr = FALSE))
+
+daily_alderman_student  <- plot_ly(daily_ald[daily_ald$affiliation=='ugrad', ],
+                                 x = ~date, y = ~user, 
+                                 type = "scatter", mode = "lines",
+                                 text = ~day)  %>%
+  layout(title = 'Total unique students per day in Alderman',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Day")) 
+
+
+daily_alderman_student
+```
+
+## Total unique graduate students per day in Alderman
+```{r}
+daily_ald <- alderman %>% 
+  group_by(affiliation, date) %>% 
+  summarise(user = n_distinct(user)) %>% 
+  mutate(day = wday(date, label = TRUE, abbr = FALSE))
+
+daily_alderman_student  <- plot_ly(daily_ald[daily_ald$affiliation=='grad', ],
+                                 x = ~date, y = ~user, 
+                                 type = "scatter", mode = "lines",
+                                 text = ~day)  %>%
+  layout(title = 'Total unique students per day in Alderman',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Day")) 
+
+
+daily_alderman_student
+```
+
+## Total unique faculty per day in Alderman
+```{r}
+daily_alderman_faculty <- plot_ly(daily_ald[daily_ald$affiliation=='faculty', ],
+                                  x = ~date, y = ~user,
+                                  type = "scatter", mode = "lines",
+                                  text = ~day)  %>%
+  layout(title = 'Total unique faculty per day in Alderman',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Day")) 
+
+
+daily_alderman_faculty
+```
+
+## Total unique staff per day in Alderman
+```{r}
+daily_alderman_staff <- plot_ly(daily_ald[daily_ald$affiliation=='staff', ],
+                                x = ~date, y = ~user,
+                                type = "scatter", mode = "lines",
+                                text = ~day)  %>%
+  layout(title = 'Total unique staff per day in Alderman',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Day")) 
+
+daily_alderman_staff
+```
+
+## Total unique undergraduate students per day in Clemons
+```{r}
+daily_clem <- clemons %>% 
+  group_by(affiliation, date) %>% 
+  summarise(user = n_distinct(user)) %>% 
+  mutate(day = wday(date, label = TRUE, abbr = FALSE))
+
+daily_clem_student  <- plot_ly(daily_clem[daily_clem$affiliation=='ugrad', ],
+                                   x = ~date, y = ~user, 
+                                   type = "scatter", mode = "lines")  %>%
+  layout(title = 'Total unique students per day in Clemons',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Day")) 
+
+
+daily_clem_student 
+```
+
+## Total unique graduate students per day in Clemons
+```{r}
+daily_clem <- clemons %>% 
+  group_by(affiliation, date) %>% 
+  summarise(user = n_distinct(user)) %>% 
+  mutate(day = wday(date, label = TRUE, abbr = FALSE))
+
+daily_clem_student  <- plot_ly(daily_clem[daily_clem$affiliation=='grad', ],
+                                   x = ~date, y = ~user, 
+                                   type = "scatter", mode = "lines")  %>%
+  layout(title = 'Total unique students per day in Clemons',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Day")) 
+
+
+daily_clem_student 
+```
+
+## Total unique faculty per day in Clemons
+```{r}
+daily_clem_faculty <- plot_ly(daily_clem[daily_clem$affiliation=='faculty', ],
+                              x = ~date, y = ~user,
+                              type = "scatter", mode = "lines",
+                              text = ~day)  %>%
+  layout(title = 'Total unique faculty per day in Clemons',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Day")) 
+
+
+daily_clem_faculty
+```
+
+## Total unique staff per day in Clemons
+```{r}
+daily_clem_staff <- plot_ly(daily_clem[daily_clem$affiliation=='staff', ],
+                            x = ~date, y = ~user,
+                            type = "scatter", mode = "lines",
+                            text = ~day)  %>%
+  layout(title = 'Total unique staff per day in Clemons',
+         yaxis = list(title="Unique users"),
+         xaxis = list(title="Day")) 
+
+daily_clem_staff
+```
+
